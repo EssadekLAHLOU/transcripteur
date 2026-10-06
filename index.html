@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#16233b">
+<title>Transcripteur de réunions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : écran de préparation, puis une colonne de travail — commandes en haut, fil horodaté, ligne "en direct" collée en bas */
+:root{
+  --bg:#f3f4f7; --surface:#ffffff; --ink:#16233b; --muted:#5d6880; --line:#dde1ea;
+  --accent:#1f4fa8; --accent-soft:#e3eaf8; --rec:#c8322b; --rec-soft:#fbe6e4; --ok:#2f7d4f; --ok-soft:#e2f2e8;
+  --f-ui:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1520; --surface:#18202e; --ink:#e7ebf3; --muted:#9aa5bb; --line:#2a3446;
+  --accent:#7ea6f2; --accent-soft:#1e2c47; --rec:#ef6a60; --rec-soft:#3a1e1d; --ok:#6cc08f; --ok-soft:#1b3326;
+  color-scheme:dark;}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.work{display:flex;flex-direction:column;gap:14px}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-ui);padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a{color:var(--accent)}
+.app{max-width:860px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:14px;min-height:100%}
+
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{flex:none}
+.brand h1{font-size:17px;margin:0;font-weight:700;letter-spacing:-.01em}
+.title-in,.in{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:10px 12px;min-height:44px;width:100%}
+.title-in{flex:1 1 260px;min-width:0;font-weight:600;width:auto}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.panel h2{margin:0;font-size:19px;letter-spacing:-.01em}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.field{display:flex;flex-direction:column;gap:6px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+
+.stepper{display:flex;align-items:center;gap:10px}
+.stepper button{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-size:22px;font-weight:600}
+.stepper output{font:600 22px var(--f-mono);min-width:32px;text-align:center}
+.names{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.name-row{display:flex;align-items:center;gap:8px}
+.name-row .sw{width:12px;height:12px;border-radius:50%;flex:none}
+
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.mode{border:1.5px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;background:var(--bg)}
+.mode input{margin-top:4px;accent-color:var(--accent)}
+.mode b{display:block}
+.mode span{font-size:13px;color:var(--muted)}
+.mode:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.check{display:flex;gap:8px;align-items:center;font-size:14.5px;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+.seg .orig{font-size:12.5px;color:var(--muted);border-left:2px solid var(--line);padding-left:8px;margin-top:2px}
+.seg .pending{font-style:italic;color:var(--muted)}
+.seg .pending::after{content:"  · mise en français…";font-size:12px}
+.keybox{display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--accent);padding-left:12px}
+
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.rec-btn{display:inline-flex;align-items:center;gap:10px;border:0;border-radius:999px;padding:12px 22px;font-weight:700;font-size:16px;background:var(--rec);color:#fff;min-height:48px}
+.rec-btn .dot{width:12px;height:12px;border-radius:50%;background:#fff}
+.rec-btn.on{background:var(--ink);color:var(--bg)}
+.rec-btn.on .dot{border-radius:2px;background:var(--rec)}
+.big{border:0;border-radius:10px;padding:14px 22px;font-weight:700;font-size:16px;background:var(--rec);color:#fff;min-height:52px}
+.timer{font:500 22px var(--f-mono);font-variant-numeric:tabular-nums;min-width:96px}
+.state{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.state i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.state.live i{background:var(--rec);animation:pulse 1.2s infinite}
+.state.live{color:var(--rec);font-weight:600}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.state.live i{animation:none}}
+.spacer{flex:1}
+select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 10px;min-height:44px}
+.badge{font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px}
+.badge.auto{background:var(--ok-soft);color:var(--ok)}
+.badge.man{background:var(--accent-soft);color:var(--accent)}
+
+.speakers{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{border:1.5px solid var(--line);background:var(--bg);border-radius:999px;padding:10px 16px;font-size:15px;display:inline-flex;gap:8px;align-items:center;min-height:44px}
+.chip.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:700}
+.chip .sw{width:10px;height:10px;border-radius:50%}
+.chip.static{cursor:default}
+
+.feed{flex:1;display:flex;flex-direction:column;gap:2px;min-height:160px}
+.empty{color:var(--muted);text-align:center;padding:36px 10px;border:1px dashed var(--line);border-radius:12px}
+.seg{display:grid;grid-template-columns:62px 1fr auto;gap:10px;padding:10px 8px;border-radius:8px;align-items:start}
+.seg:hover{background:var(--surface)}
+.seg time{font:12.5px var(--f-mono);color:var(--muted);padding-top:5px;font-variant-numeric:tabular-nums}
+.seg .body{min-width:0;display:flex;flex-direction:column;gap:2px}
+.seg select.who{border:0;background:transparent;padding:0 2px;min-height:0;font-weight:700;font-size:13.5px;width:max-content;max-width:100%}
+.seg .txt{outline:none;word-wrap:break-word;white-space:pre-wrap;border-radius:4px}
+.seg .txt:focus{background:var(--accent-soft)}
+.seg .del{border:0;background:none;color:var(--muted);opacity:.5;padding:2px 6px;font-size:18px}
+.seg:hover .del,.seg .del:focus{opacity:1}
+
+.live{position:sticky;bottom:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-height:52px;color:var(--muted);font-style:italic;box-shadow:0 -6px 18px rgba(0,0,0,.06)}
+.live.has{color:var(--ink);font-style:normal;border-color:var(--rec)}
+
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 14px;min-height:42px;font-weight:500}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--rec)}
+.stats{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.banner{border-radius:10px;padding:10px 14px;font-size:14px;background:var(--rec-soft);color:var(--ink);border:1px solid var(--rec)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:10;max-width:calc(100% - 32px)}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+
+@media (max-width:520px){
+  .seg{grid-template-columns:1fr auto}
+  .seg time{grid-column:1/-1;padding:0}
+  .timer{font-size:20px;min-width:0}
+  .rec-btn,.big{flex:1;justify-content:center}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect width="28" height="28" rx="7" fill="var(--accent)"/><rect x="11" y="6" width="6" height="11" rx="3" fill="#fff"/><path d="M8 13a6 6 0 0 0 12 0M14 19v3" stroke="#fff" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
+      <h1>Transcripteur</h1>
+    </div>
+    <input id="title" class="title-in" placeholder="Titre de la réunion" aria-label="Titre de la réunion">
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <!-- ========== PRÉPARATION ========== -->
+  <section id="setup" class="panel">
+    <h2>Préparer la réunion</h2>
+
+    <div class="field">
+      <span class="lbl">Nombre de participants</span>
+      <div class="stepper">
+        <button id="minus" aria-label="Un participant de moins">−</button>
+        <output id="count">2</output>
+        <button id="plus" aria-label="Un participant de plus">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="lbl">Noms des participants</span>
+      <div id="names" class="names"></div>
+      <p class="hint">En mode automatique, la 1<sup>re</sup> voix entendue reçoit le 1<sup>er</sup> nom, la 2<sup>e</sup> voix le 2<sup>e</sup> nom, etc. Faites parler les participants dans cet ordre au début, ou corrigez ensuite en touchant le nom dans le texte.</p>
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="lang">Langue parlée pendant la réunion</label>
+      <select id="lang">
+        <option value="mix">Mélange darija, français et anglais</option>
+        <option value="fr-FR">Français uniquement</option>
+        <option value="ar-MA">Darija / arabe uniquement</option>
+        <option value="en-GB">Anglais uniquement</option>
+      </select>
+      <label class="check"><input type="checkbox" id="toFr"> Rédiger toute la transcription en français</label>
+      <p id="mixHint" class="hint">Chaque phrase est d'abord transcrite telle qu'elle a été dite, puis réécrite en français correct quelques secondes après. Le texte original reste visible en petit sous chaque phrase.</p>
+    </div>
+
+    <div id="anthBox" class="keybox">
+      <label class="lbl" for="anKey">Clé Anthropic (pour la mise en français)</label>
+      <input id="anKey" class="in" type="password" autocomplete="off" placeholder="sk-ant-…">
+      <p class="hint">Créez une clé sur <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>, rubrique « API Keys ». C'est Claude qui comprend le darija mélangé et le réécrit en français. Coût indicatif : quelques dirhams par heure de réunion. La clé reste enregistrée sur cet appareil uniquement.</p>
+    </div>
+
+    <div class="field">
+      <span class="lbl">Reconnaissance des intervenants</span>
+      <div class="modes">
+        <label class="mode"><input type="radio" name="mode" value="auto" id="modeAuto">
+          <div><b>Automatique</b><span>L'application reconnaît les voix et attribue chaque phrase au bon participant. Nécessite une clé Deepgram (crédit gratuit à l'inscription).</span></div></label>
+        <label class="mode"><input type="radio" name="mode" value="manual" id="modeMan">
+          <div><b>Manuel, gratuit</b><span>Vous touchez le nom de la personne qui prend la parole pendant la réunion.</span></div></label>
+      </div>
+    </div>
+
+    <div id="keybox" class="keybox">
+      <label class="lbl" for="dgKey">Clé Deepgram</label>
+      <input id="dgKey" class="in" type="password" autocomplete="off" placeholder="Collez votre clé ici">
+      <p class="hint">Créez un compte sur <a href="https://console.deepgram.com/signup" target="_blank" rel="noopener">console.deepgram.com</a>, puis « API Keys » → « Create a New API Key ». La clé reste enregistrée sur cet appareil uniquement.</p>
+    </div>
+
+    <div class="actions">
+      <button id="go" class="big">● Commencer la réunion</button>
+      <button id="backWork" class="btn" hidden>Retour à la transcription</button>
+    </div>
+  </section>
+
+  <!-- ========== TRAVAIL ========== -->
+  <div id="work" class="work" hidden>
+    <section class="panel">
+      <div class="controls">
+        <button id="recBtn" class="rec-btn"><span class="dot"></span><span id="recLbl">Démarrer</span></button>
+        <span id="timer" class="timer">00:00:00</span>
+        <span id="state" class="state"><i></i><span id="stateTxt">Prêt</span></span>
+        <span class="spacer"></span>
+        <span id="modeBadge" class="badge"></span>
+      </div>
+      <div>
+        <div id="spkTitle" class="lbl" style="margin-bottom:8px">Qui parle ?</div>
+        <div id="speakers" class="speakers"></div>
+      </div>
+      <p id="spkHint" class="hint"></p>
+    </section>
+
+    <section id="feed" class="feed" aria-live="polite"></section>
+
+    <div id="live" class="live"></div>
+
+    <section class="panel">
+      <div class="actions">
+        <button class="btn primary" id="expWord">Exporter Word</button>
+        <button class="btn" id="expTxt">Exporter texte</button>
+        <button class="btn" id="copy">Copier</button>
+        <label class="check"><input type="checkbox" id="withOrig"> Inclure le texte original</label>
+        <span class="spacer"></span>
+        <button class="btn" id="editSetup">Participants</button>
+        <button class="btn danger" id="reset">Nouvelle réunion</button>
+      </div>
+      <div id="confirmBox" class="confirm" hidden>
+        <span>Effacer la transcription en cours ?</span>
+        <button class="btn danger" id="yesReset">Oui, effacer</button>
+        <button class="btn" id="noReset">Annuler</button>
+      </div>
+      <div id="stats" class="stats"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const COLORS = ['#1f4fa8','#b4532a','#2f7d4f','#7a3fa0','#a8861f','#2a7f8f','#a83f6a','#555f73','#3b6e1f','#8f2a2a'];
+  const KEY = 'transcripteur_reunion_v2', KEY_DG = 'transcripteur_deepgram_key', KEY_AN = 'transcripteur_anthropic_key';
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  const blank = () => ({title:'', lang:'mix', toFr:true, withOrig:false, mode:'auto', speakers:['',''], cur:0, segs:[], voiceMap:{}, elapsed:0, date:new Date().toISOString(), started:false, nextId:1});
+  let S = blank();
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && Array.isArray(d.segs)) S = Object.assign(S, d); } catch(e){}
+  if (!['mix','fr-FR','ar-MA','en-GB'].includes(S.lang)) S.lang = 'mix';
+  S.segs.forEach(g => { if (!g.id) g.id = S.nextId++; });
+  let dgKey = ''; try { dgKey = localStorage.getItem(KEY_DG) || ''; } catch(e){}
+  let anKey = ''; try { anKey = localStorage.getItem(KEY_AN) || ''; } catch(e){}
+  // langue réellement envoyée au moteur de reconnaissance : en mélange, le darija sert de base
+  const recLang = () => S.lang === 'mix' ? 'ar-MA' : S.lang;
+  const needFr = () => S.toFr && S.lang !== 'fr-FR';
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} };
+  const spkName = i => (S.speakers[i] || '').trim() || ('Intervenant ' + (i + 1));
+
+  let running = false, startedAt = 0, tick = null, wake = null;
+
+  // ================= PRÉPARATION =================
+  function renderSetup() {
+    $('count').textContent = S.speakers.length;
+    const box = $('names'); box.textContent = '';
+    S.speakers.forEach((n, i) => {
+      const row = document.createElement('div'); row.className = 'name-row';
+      const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = COLORS[i % COLORS.length];
+      const inp = document.createElement('input'); inp.className = 'in'; inp.id = 'nm' + i;
+      inp.placeholder = 'Participant ' + (i + 1); inp.value = n; inp.dir = 'auto';
+      inp.oninput = () => { S.speakers[i] = inp.value; save(); };
+      row.append(sw, inp); box.append(row);
+    });
+    $('lang').value = S.lang;
+    $('toFr').checked = S.toFr; $('toFr').parentElement.hidden = S.lang === 'fr-FR';
+    $('mixHint').hidden = !needFr(); $('anthBox').hidden = !needFr(); $('anKey').value = anKey;
+    $('modeAuto').checked = S.mode === 'auto'; $('modeMan').checked = S.mode === 'manual';
+    $('keybox').hidden = S.mode !== 'auto';
+    $('dgKey').value = dgKey;
+    $('go').textContent = S.segs.length ? '● Reprendre la réunion' : '● Commencer la réunion';
+    $('backWork').hidden = !S.started;
+  }
+  $('plus').onclick = () => { if (S.speakers.length < 10) { S.speakers.push(''); save(); renderSetup(); $('nm' + (S.speakers.length - 1)).focus(); } };
+  $('minus').onclick = () => {
+    if (S.speakers.length <= 1) return;
+    const last = S.speakers.length - 1;
+    if (S.segs.some(g => g.s === last)) { toast('Ce participant a déjà des passages : réattribuez-les avant de le retirer.'); return; }
+    S.speakers.pop(); save(); renderSetup();
+  };
+  $('lang').onchange = e => { S.lang = e.target.value; if (S.lang === 'mix' || S.lang === 'ar-MA') S.toFr = true; save(); renderSetup(); };
+  $('toFr').onchange = e => { S.toFr = e.target.checked; save(); renderSetup(); };
+  $('anKey').oninput = e => { anKey = e.target.value.trim(); try { localStorage.setItem(KEY_AN, anKey); } catch(_){} };
+  document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { S.mode = r.value; save(); renderSetup(); });
+  $('dgKey').oninput = e => { dgKey = e.target.value.trim(); try { localStorage.setItem(KEY_DG, dgKey); } catch(_){} };
+  $('go').onclick = () => {
+    if (needFr() && !anKey) { showBanner('Collez votre clé Anthropic pour la mise en français, ou décochez « Rédiger toute la transcription en français ».'); $('anKey').focus(); return; }
+    if (S.mode === 'auto' && !dgKey) { showBanner('Collez votre clé Deepgram, ou choisissez le mode manuel.'); $('dgKey').focus(); return; }
+    if (S.mode === 'manual' && !SR) { showBanner("Le mode manuel utilise la reconnaissance vocale du navigateur, absente ici. Ouvrez l'application dans Chrome ou Edge, ou choisissez le mode automatique."); return; }
+    S.started = true; save(); showWork(); start();
+  };
+  $('backWork').onclick = () => showWork();
+  $('editSetup').onclick = () => { if (running) stop(); showSetup(); };
+
+  function showSetup(){ hideBanner(); $('work').hidden = true; $('setup').hidden = false; renderSetup(); }
+  function showWork(){ hideBanner(); $('setup').hidden = true; $('work').hidden = false; renderSpeakers(); renderFeed(); ui(); }
+
+  // ================= MOTEUR AUTOMATIQUE (Deepgram, reconnaissance des voix) =================
+  const DG = { ws:null, ctx:null, stream:null, proc:null, ka:null, base:0, opened:false };
+  const dgLang = () => { const l = recLang(); return l === 'ar-MA' ? 'ar-MA' : l.startsWith('en') ? 'en' : 'fr'; };
+
+  async function dgStart() {
+    try {
+      DG.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}});
+    } catch(e) { micDenied(); return false; }
+    const params = new URLSearchParams({model:'nova-3', language:dgLang(), diarize:'true', punctuate:'true', smart_format:'true',
+      interim_results:'true', endpointing:'400', encoding:'linear16', sample_rate:'16000', channels:'1'});
+    DG.base = S.elapsed; DG.opened = false;
+    DG.ws = new WebSocket('wss://api.deepgram.com/v1/listen?' + params, ['token', dgKey]);
+    DG.ws.binaryType = 'arraybuffer';
+    DG.ws.onopen = () => {
+      DG.opened = true;
+      DG.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = DG.ctx.createMediaStreamSource(DG.stream);
+      DG.proc = DG.ctx.createScriptProcessor(4096, 1, 1);
+      DG.proc.onaudioprocess = ev => { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(to16k(ev.inputBuffer.getChannelData(0), DG.ctx.sampleRate)); };
+      src.connect(DG.proc); DG.proc.connect(DG.ctx.destination);
+      DG.ka = setInterval(() => { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(JSON.stringify({type:'KeepAlive'})); }, 8000);
+    };
+    DG.ws.onmessage = ev => {
+      let m; try { m = JSON.parse(ev.data); } catch(_) { return; }
+      if (m.type !== 'Results') return;
+      const alt = m.channel && m.channel.alternatives && m.channel.alternatives[0];
+      if (!alt) return;
+      if (!m.is_final) { setLive(alt.transcript); return; }
+      setLive('');
+      const words = alt.words || [];
+      let cur = null;
+      for (const w of words) {
+        const v = w.speaker ?? 0, txt = w.punctuated_word || w.word;
+        if (cur && cur.v === v) { cur.text += ' ' + txt; cur.end = w.end; }
+        else { if (cur) addSeg(cur.text, voiceToSpeaker(cur.v), DG.base + cur.start, cur.v); cur = {v, text:txt, start:w.start, end:w.end}; }
+      }
+      if (cur) addSeg(cur.text, voiceToSpeaker(cur.v), DG.base + cur.start, cur.v);
+    };
+    DG.ws.onclose = ev => {
+      if (!running) return;
+      if (!DG.opened || ev.code === 1008 || ev.code === 4001) {
+        showBanner("Deepgram a refusé la connexion : vérifiez la clé (bouton « Participants ») et le crédit restant sur votre compte Deepgram.");
+        stop();
+      } else {
+        dgCleanup(); S.elapsed = elapsedNow(); dgStart();   // reconnexion automatique
+      }
+    };
+    return true;
+  }
+  function dgStop() {
+    try { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(JSON.stringify({type:'CloseStream'})); } catch(_){}
+    const ws = DG.ws; setTimeout(() => { try { ws && ws.close(); } catch(_){} }, 1500);
+    dgCleanup(true);
+  }
+  function dgCleanup(keepWs) {
+    clearInterval(DG.ka);
+    try { DG.proc && DG.proc.disconnect(); } catch(_){}
+    try { DG.ctx && DG.ctx.close(); } catch(_){}
+    try { DG.stream && DG.stream.getTracks().forEach(t => t.stop()); } catch(_){}
+    DG.proc = DG.ctx = DG.stream = null;
+    if (!keepWs) DG.ws = null;
+  }
+  function to16k(buf, rate) {
+    const ratio = rate / 16000, len = Math.floor(buf.length / ratio), out = new Int16Array(len);
+    for (let i = 0; i < len; i++) {
+      const a = Math.floor(i * ratio), b = Math.min(buf.length, Math.floor((i + 1) * ratio));
+      let s = 0; for (let j = a; j < b; j++) s += buf[j]; s = s / Math.max(1, b - a);
+      s = Math.max(-1, Math.min(1, s)); out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return out.buffer;
+  }
+  // Une "voix" détectée → un participant. 1re voix = 1er nom, etc.
+  function voiceToSpeaker(v) {
+    if (S.voiceMap[v] !== undefined) return S.voiceMap[v];
+    const used = new Set(Object.values(S.voiceMap));
+    let idx = S.speakers.findIndex((_, i) => !used.has(i));
+    if (idx === -1) { S.speakers.push(''); idx = S.speakers.length - 1; }
+    S.voiceMap[v] = idx; save(); renderSpeakers();
+    return idx;
+  }
+
+  // ================= MOTEUR MANUEL (navigateur) =================
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  let rec = null, lastFinal = '';
+  function wsStart() {
+    rec = new SR();
+    rec.lang = recLang(); rec.interimResults = true; rec.continuous = !isAndroid; rec.maxAlternatives = 1;
+    rec.onresult = e => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i], t = r[0].transcript.trim();
+        if (r.isFinal) { if (t && t !== lastFinal) { addSeg(t, S.cur, elapsedNow()); lastFinal = t; } }
+        else interim += r[0].transcript;
+      }
+      setLive(interim.trim());
+    };
+    rec.onerror = e => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { micDenied(); stop(); }
+      else if (e.error === 'network') showBanner("Pas de connexion : la reconnaissance vocale du navigateur a besoin d'Internet.");
+      else if (e.error === 'language-not-supported') { showBanner("Cette langue n'est pas prise en charge par votre navigateur."); stop(); }
+    };
+    rec.onend = () => { if (running) setTimeout(() => { if (running) try { rec.start(); } catch(_){} }, 150); };
+    try { rec.start(); return true; } catch(e) { return false; }
+  }
+  function wsStop(){ try { rec && rec.stop(); } catch(_){} }
+
+  function micDenied() {
+    showBanner(location.protocol === 'file:'
+      ? "Le navigateur bloque le micro quand l'application est ouverte comme fichier sur l'ordinateur. Mettez-la en ligne (par exemple sur app.netlify.com/drop) et ouvrez l'adresse https obtenue."
+      : "Accès au micro refusé. Cliquez sur le cadenas à gauche de l'adresse, autorisez le microphone, rechargez la page et réessayez.");
+  }
+
+  // ================= ENREGISTREMENT =================
+  const elapsedNow = () => running ? Math.floor((Date.now() - startedAt) / 1000) : S.elapsed;
+  async function start() {
+    if (running) return;
+    hideBanner();
+    running = true; startedAt = Date.now() - S.elapsed * 1000; lastFinal = '';
+    const ok = S.mode === 'auto' ? await dgStart() : wsStart();
+    if (!ok) { running = false; ui(); return; }
+    tick = setInterval(updTimer, 500);
+    try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch(_){}
+    ui();
+  }
+  function stop() {
+    if (!running) { ui(); return; }
+    S.elapsed = elapsedNow();
+    running = false;
+    S.mode === 'auto' ? dgStop() : wsStop();
+    clearInterval(tick); updTimer();
+    try { wake && wake.release(); } catch(_){} wake = null;
+    save(); ui();
+  }
+  document.addEventListener('visibilitychange', async () => {
+    if (running && document.visibilityState === 'visible' && 'wakeLock' in navigator) { try { wake = await navigator.wakeLock.request('screen'); } catch(_){} }
+  });
+
+  // ================= DONNÉES =================
+  function addSeg(text, s, t, v) {
+    text = text.trim(); if (!text) return;
+    const last = S.segs[S.segs.length - 1];
+    let seg;
+    if (last && last.s === s && last.v === v && t - last.end < 8 && !last.edited) {
+      seg = last; seg.end = t;
+      if (needFr()) seg.raw = (seg.raw || seg.text) + ' ' + text; else seg.text += ' ' + text;
+    } else {
+      const cap = text.charAt(0).toUpperCase() + text.slice(1);
+      seg = {id:S.nextId++, t, end:t, s, v, text:cap};
+      if (needFr()) { seg.raw = text; seg.text = ''; }
+      S.segs.push(seg);
+    }
+    if (needFr()) { seg.tr = 'pending'; scheduleFr(seg); }
+    save(); renderFeed(true);
+  }
+
+  // ================= MISE EN FRANÇAIS (Claude) =================
+  const frTimers = new Map();
+  let anErrShown = false;
+  function scheduleFr(seg) {
+    clearTimeout(frTimers.get(seg.id));
+    // on attend que la personne ait fini sa phrase avant de réécrire
+    frTimers.set(seg.id, setTimeout(() => translateSeg(seg.id), running ? 1800 : 50));
+  }
+  async function translateSeg(id) {
+    const seg = S.segs.find(g => g.id === id);
+    if (!seg || !seg.raw || seg.edited) return;
+    const raw = seg.raw;
+    const i = S.segs.indexOf(seg);
+    const ctx = S.segs.slice(Math.max(0, i - 4), i).filter(g => g.text).map(g => `${spkName(g.s)} : ${g.text}`).join('\n');
+    const prompt =
+`Tu transcris en direct une réunion professionnelle au Maroc. Les participants mélangent darija (arabe marocain), français et parfois anglais dans la même phrase. Le moteur de reconnaissance vocale a produit le texte brut ci-dessous, souvent en écriture arabe même pour des mots français, et il peut contenir des erreurs d'écoute.
+
+Réécris ce passage en français correct et naturel, fidèle à ce qui a été dit :
+- traduis le darija et l'anglais en français, garde les mots déjà français ;
+- ne résume pas, n'ajoute rien, ne commente pas ;
+- garde exactement les noms propres, chiffres, montants, dates et références ;
+- si un mot est incompréhensible, écris [inaudible].
+Réponds uniquement avec le texte en français, sans guillemets ni préambule.
+${ctx ? `\nContexte (phrases précédentes, déjà en français) :\n${ctx}\n` : ''}
+Passage de ${spkName(seg.s)} à réécrire :
+${raw}`;
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'content-type':'application/json','x-api-key':anKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body: JSON.stringify({model:'claude-sonnet-5-5', max_tokens:1024, messages:[{role:'user', content:prompt}]})
+      });
+      if (!r.ok) {
+        seg.tr = 'error';
+        if (!anErrShown) {
+          anErrShown = true;
+          showBanner(r.status === 401 ? 'Clé Anthropic refusée : vérifiez-la dans « Participants ». Le texte original est conservé.'
+            : r.status === 429 ? 'Trop de demandes de mise en français en même temps : elles reprendront automatiquement.'
+            : r.status === 400 || r.status === 402 ? 'Mise en français impossible : vérifiez le crédit de votre compte Anthropic. Le texte original est conservé.'
+            : 'Mise en français momentanément indisponible. Le texte original est conservé.');
+        }
+        if (r.status === 429 || r.status >= 500) setTimeout(() => { anErrShown = false; translateSeg(id); }, 4000);
+        renderFeed(); return;
+      }
+      const j = await r.json();
+      const out = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('').trim();
+      if (seg.raw !== raw || seg.edited) return;   // une suite est arrivée entre-temps : une nouvelle demande est en route
+      seg.text = out || raw; seg.tr = 'done'; anErrShown = false;
+      save(); renderFeed();
+    } catch(e) {
+      seg.tr = 'error';
+      if (!anErrShown) { anErrShown = true; showBanner('Pas de connexion pour la mise en français. Le texte original est conservé.'); }
+      renderFeed();
+    }
+  }
+  const fmt = sec => { sec = Math.max(0, sec|0); const h=sec/3600|0, m=(sec%3600)/60|0, s=sec%60; return [h,m,s].map(n=>String(n).padStart(2,'0')).join(':'); };
+  const fmtShort = sec => { const f = fmt(sec); return f.startsWith('00:') ? f.slice(3) : f; };
+
+  // ================= AFFICHAGE =================
+  function updTimer(){ if (running) S.elapsed = elapsedNow(); $('timer').textContent = fmt(S.elapsed); }
+  function setLive(t) {
+    const el = $('live');
+    if (t) { el.textContent = '« ' + t + ' »'; el.classList.add('has'); el.dir = 'auto'; }
+    else { el.textContent = running ? 'À l\'écoute…' : 'Le texte apparaîtra ici pendant que les participants parlent…'; el.classList.remove('has'); }
+  }
+  function ui() {
+    $('recBtn').classList.toggle('on', running);
+    $('recLbl').textContent = running ? 'Pause' : (S.segs.length ? 'Reprendre' : 'Démarrer');
+    $('state').classList.toggle('live', running);
+    $('stateTxt').textContent = running ? 'Enregistrement' : (S.segs.length ? 'En pause' : 'Prêt');
+    const auto = S.mode === 'auto';
+    $('modeBadge').className = 'badge ' + (auto ? 'auto' : 'man');
+    $('modeBadge').textContent = auto ? 'Voix reconnues automatiquement' : 'Intervenants en manuel';
+    $('spkTitle').textContent = auto ? 'Participants' : 'Qui parle ? Touchez le nom';
+    $('spkHint').textContent = auto
+      ? "Si une phrase est attribuée à la mauvaise personne, touchez le nom au-dessus de la phrase et choisissez le bon : toutes les phrases de cette voix sont corrigées d'un coup."
+      : "Touchez le nom de la personne qui prend la parole. Les phrases suivantes lui sont attribuées.";
+    setLive('');
+  }
+  function renderSpeakers() {
+    const box = $('speakers'); box.textContent = '';
+    const auto = S.mode === 'auto';
+    S.speakers.forEach((_, i) => {
+      const b = document.createElement('button');
+      b.className = 'chip' + (!auto && i === S.cur ? ' cur' : '') + (auto ? ' static' : '');
+      const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = COLORS[i % COLORS.length];
+      b.append(sw, document.createTextNode(spkName(i)));
+      if (!auto) b.onclick = () => { S.cur = i; save(); renderSpeakers(); };
+      else b.tabIndex = -1;
+      box.append(b);
+    });
+  }
+  function renderFeed(scroll) {
+    const feed = $('feed'); feed.textContent = '';
+    if (!S.segs.length) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = 'Aucune transcription pour l\'instant. Posez le téléphone ou l\'ordinateur au centre de la table et appuyez sur « Démarrer ».';
+      feed.append(e);
+    }
+    S.segs.forEach((g, idx) => {
+      const row = document.createElement('div'); row.className = 'seg';
+      const tm = document.createElement('time'); tm.textContent = fmtShort(g.t);
+      const body = document.createElement('div'); body.className = 'body';
+      const who = document.createElement('select'); who.className = 'who'; who.setAttribute('aria-label', 'Intervenant');
+      S.speakers.forEach((_, i) => { const o = document.createElement('option'); o.value = i; o.textContent = spkName(i); who.append(o); });
+      who.value = g.s; who.style.color = COLORS[g.s % COLORS.length];
+      who.onchange = () => {
+        const n = +who.value;
+        if (g.v !== undefined && g.v !== null) {           // corrige toute la voix
+          S.voiceMap[g.v] = n; S.segs.forEach(x => { if (x.v === g.v) x.s = n; });
+        } else g.s = n;
+        save(); renderFeed(); toast('Intervenant corrigé');
+      };
+      const tx = document.createElement('div'); tx.className = 'txt'; tx.contentEditable = 'true'; tx.dir = 'auto';
+      const waiting = g.raw && !g.edited && g.tr !== 'done';
+      tx.textContent = waiting ? g.raw : g.text;
+      if (waiting && g.tr === 'pending') tx.classList.add('pending');
+      tx.onblur = () => {
+        const v = tx.textContent.trim(); if (v === (waiting ? g.raw : g.text)) return;
+        g.text = v; g.edited = true; clearTimeout(frTimers.get(g.id));
+        if (!g.text) S.segs.splice(idx,1); save(); renderFeed();
+      };
+      body.append(who, tx);
+      if (g.raw && !waiting) {
+        const o = document.createElement('div'); o.className = 'orig'; o.dir = 'auto'; o.textContent = g.raw; body.append(o);
+      }
+      if (waiting && g.tr === 'error') {
+        const rb = document.createElement('button'); rb.className = 'btn'; rb.style.alignSelf = 'flex-start'; rb.style.minHeight = '32px'; rb.style.padding = '4px 10px';
+        rb.textContent = 'Mettre en français';
+        rb.onclick = () => { g.tr = 'pending'; anErrShown = false; renderFeed(); translateSeg(g.id); };
+        body.append(rb);
+      }
+      const del = document.createElement('button'); del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label','Supprimer ce passage');
+      del.onclick = () => { S.segs.splice(idx,1); save(); renderFeed(); };
+      row.append(tm, body, del); feed.append(row);
+    });
+    const words = S.segs.reduce((n,g) => n + g.text.split(/\s+/).filter(Boolean).length, 0);
+    $('stats').textContent = S.segs.length ? `${S.segs.length} passages · ${words} mots · durée ${fmt(S.elapsed)}` : '';
+    if (scroll && running) $('live').scrollIntoView({block:'end', behavior:'smooth'});
+  }
+
+  // ================= EXPORT =================
+  const niceDate = () => new Date(S.date).toLocaleString('fr-FR', {dateStyle:'full', timeStyle:'short'});
+  const fileBase = () => ((S.title || 'Reunion').replace(/[\\/:*?"<>|]+/g,'').trim() || 'Reunion') + '_' + new Date(S.date).toISOString().slice(0,10);
+  const parts = () => S.speakers.map((_, i) => spkName(i)).join(', ');
+  function asText() {
+    let out = (S.title || 'Réunion') + '\n' + niceDate() + '\nDurée : ' + fmt(S.elapsed) + '\nParticipants : ' + parts() + '\n\n';
+    S.segs.forEach(g => {
+      out += `[${fmt(g.t)}] ${spkName(g.s)} : ${segText(g)}\n`;
+      if (S.withOrig && g.raw && segText(g) !== g.raw) out += `    (original : ${g.raw})\n`;
+      out += '\n';
+    });
+    return out;
+  }
+  const segText = g => (g.raw && !g.edited && g.tr !== 'done') ? g.raw : g.text;
+  const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  function asWord() {
+    const rows = S.segs.map(g => `<p style="margin:0 0 10pt"><span style="color:#777;font-family:Consolas">[${fmt(g.t)}]</span> <b style="color:${COLORS[g.s % COLORS.length]}">${esc(spkName(g.s))}</b> : <span dir="auto">${esc(segText(g))}</span>`
+      + (S.withOrig && g.raw && segText(g) !== g.raw ? `<br><span dir="auto" style="color:#888;font-size:9pt">Original : ${esc(g.raw)}</span>` : '') + `</p>`).join('');
+    return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>${esc(S.title||'Réunion')}</title></head>
+<body style="font-family:Calibri,Arial;font-size:11pt">
+<h1 style="font-size:18pt;color:#16233b;margin:0">${esc(S.title || 'Compte rendu de réunion')}</h1>
+<p style="color:#555">${esc(niceDate())} — Durée : ${fmt(S.elapsed)}<br>Participants : ${esc(parts())}</p>
+<hr>${rows}</body></html>`;
+  }
+  function download(name, content, type) {
+    const blob = new Blob(['﻿' + content], {type});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Fichier enregistré : ' + name);
+  }
+
+  // ================= DIVERS =================
+  function showBanner(m){ const b=$('banner'); b.textContent=m; b.hidden=false; }
+  function hideBanner(){ $('banner').hidden=true; }
+  function toast(m){ const t=document.createElement('div'); t.className='toast'; t.textContent=m; document.body.append(t); setTimeout(()=>t.remove(),2800); }
+
+  $('recBtn').onclick = () => running ? stop() : start();
+  $('title').value = S.title;
+  $('title').oninput = e => { S.title = e.target.value; save(); };
+  $('expWord').onclick = () => S.segs.length ? download(fileBase() + '.doc', asWord(), 'application/msword') : toast('Rien à exporter pour l\'instant');
+  $('expTxt').onclick = () => S.segs.length ? download(fileBase() + '.txt', asText(), 'text/plain;charset=utf-8') : toast('Rien à exporter pour l\'instant');
+  $('copy').onclick = async () => {
+    try { await navigator.clipboard.writeText(asText()); toast('Transcription copiée'); }
+    catch(_) { toast('Copie impossible sur ce navigateur — utilisez l\'export texte'); }
+  };
+  $('withOrig').checked = S.withOrig;
+  $('withOrig').onchange = e => { S.withOrig = e.target.checked; save(); };
+  $('reset').onclick =() => { $('confirmBox').hidden = false; };
+  $('noReset').onclick = () => { $('confirmBox').hidden = true; };
+  $('yesReset').onclick = () => {
+    if (running) stop();
+    const keep = {lang:S.lang, mode:S.mode, toFr:S.toFr, withOrig:S.withOrig};
+    S = Object.assign(blank(), keep);
+    save(); $('title').value=''; $('confirmBox').hidden = true; updTimer();
+    showSetup(); toast('Nouvelle réunion : saisissez les participants');
+  };
+  window.addEventListener('beforeunload', save);
+
+  // Le mode manuel n'existe pas sans reconnaissance du navigateur
+  if (!SR) { $('modeMan').disabled = true; if (S.mode === 'manual') S.mode = 'auto'; }
+
+  updTimer();
+  if (S.started) showWork(); else showSetup();
+  // phrases restées en attente (page rechargée) : on relance leur mise en français
+  if (anKey) S.segs.filter(g => g.raw && !g.edited && g.tr !== 'done').forEach(g => { g.tr = 'pending'; scheduleFr(g); });
+})();
+</script>
+</body>
+</html>
