@@ -61,7 +61,7 @@ header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:s
 .check input{width:18px;height:18px;accent-color:var(--accent)}
 .seg .orig{font-size:12.5px;color:var(--muted);border-left:2px solid var(--line);padding-left:8px;margin-top:2px}
 .seg .pending{font-style:italic;color:var(--muted)}
-.seg .pending::after{content:"  · mise en français…";font-size:12px}
+.seg .pending::after{content:"  · traduction…";font-size:12px}
 .keybox{display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--accent);padding-left:12px}
 
 .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
@@ -162,7 +162,7 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
         <option value="en-GB">Anglais uniquement</option>
       </select>
       <label class="check"><input type="checkbox" id="toFr"> Rédiger toute la transcription en français</label>
-      <p id="mixHint" class="hint">Chaque phrase est d'abord transcrite telle qu'elle a été dite, puis réécrite en français correct quelques secondes après. Le texte original reste visible en petit sous chaque phrase.</p>
+      <p id="mixHint" class="hint">Chaque phrase est transcrite telle qu'elle a été dite, puis traduite en français en direct. Le texte original reste visible en petit sous chaque phrase.</p>
     </div>
 
     <div id="anthBox" class="keybox">
@@ -175,16 +175,16 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
       <span class="lbl">Reconnaissance des intervenants</span>
       <div class="modes">
         <label class="mode"><input type="radio" name="mode" value="auto" id="modeAuto">
-          <div><b>Automatique</b><span>L'application reconnaît les voix et attribue chaque phrase au bon participant. Nécessite une clé Deepgram (crédit gratuit à l'inscription).</span></div></label>
+          <div><b>Automatique</b><span>L'application reconnaît les voix et attribue chaque phrase au bon participant. Comprend le mélange darija, français et anglais et traduit en direct. Nécessite une clé Soniox.</span></div></label>
         <label class="mode"><input type="radio" name="mode" value="manual" id="modeMan">
           <div><b>Manuel, gratuit</b><span>Vous touchez le nom de la personne qui prend la parole pendant la réunion.</span></div></label>
       </div>
     </div>
 
     <div id="keybox" class="keybox">
-      <label class="lbl" for="dgKey">Clé Deepgram</label>
+      <label class="lbl" for="dgKey">Clé Soniox</label>
       <input id="dgKey" class="in" type="password" autocomplete="off" placeholder="Collez votre clé ici">
-      <p class="hint">Créez un compte sur <a href="https://console.deepgram.com/signup" target="_blank" rel="noopener">console.deepgram.com</a>, puis « API Keys » → « Create a New API Key ». La clé reste enregistrée sur cet appareil uniquement.</p>
+      <p class="hint">Créez un compte sur <a href="https://console.soniox.com/" target="_blank" rel="noopener">console.soniox.com</a>, puis « API Keys » → « Create API key ». La clé reste enregistrée sur cet appareil uniquement.</p>
     </div>
 
     <div class="actions">
@@ -238,7 +238,7 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
 (() => {
   const $ = id => document.getElementById(id);
   const COLORS = ['#1f4fa8','#b4532a','#2f7d4f','#7a3fa0','#a8861f','#2a7f8f','#a83f6a','#555f73','#3b6e1f','#8f2a2a'];
-  const KEY = 'transcripteur_reunion_v2', KEY_DG = 'transcripteur_deepgram_key', KEY_AN = 'transcripteur_anthropic_key';
+  const KEY = 'transcripteur_reunion_v2', KEY_DG = 'transcripteur_soniox_key', KEY_AN = 'transcripteur_anthropic_key';
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const blank = () => ({title:'', lang:'mix', toFr:true, withOrig:false, mode:'auto', speakers:['',''], cur:0, segs:[], voiceMap:{}, elapsed:0, date:new Date().toISOString(), started:false, nextId:1});
@@ -251,6 +251,7 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
   // langue réellement envoyée au moteur de reconnaissance : en mélange, le darija sert de base
   const recLang = () => S.lang === 'mix' ? 'ar-MA' : S.lang;
   const needFr = () => S.toFr && S.lang !== 'fr-FR';
+  const needClaude = () => needFr() && S.mode === 'manual';
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} };
   const spkName = i => (S.speakers[i] || '').trim() || ('Intervenant ' + (i + 1));
 
@@ -270,7 +271,7 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
     });
     $('lang').value = S.lang;
     $('toFr').checked = S.toFr; $('toFr').parentElement.hidden = S.lang === 'fr-FR';
-    $('mixHint').hidden = !needFr(); $('anthBox').hidden = !needFr(); $('anKey').value = anKey;
+    $('mixHint').hidden = !needFr(); $('anthBox').hidden = !needClaude(); $('anKey').value = anKey;
     $('modeAuto').checked = S.mode === 'auto'; $('modeMan').checked = S.mode === 'manual';
     $('keybox').hidden = S.mode !== 'auto';
     $('dgKey').value = dgKey;
@@ -290,8 +291,8 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
   document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => { S.mode = r.value; save(); renderSetup(); });
   $('dgKey').oninput = e => { dgKey = e.target.value.trim(); try { localStorage.setItem(KEY_DG, dgKey); } catch(_){} };
   $('go').onclick = () => {
-    if (needFr() && !anKey) { showBanner('Collez votre clé Anthropic pour la mise en français, ou décochez « Rédiger toute la transcription en français ».'); $('anKey').focus(); return; }
-    if (S.mode === 'auto' && !dgKey) { showBanner('Collez votre clé Deepgram, ou choisissez le mode manuel.'); $('dgKey').focus(); return; }
+    if (needClaude() && !anKey) { showBanner('Collez votre clé Anthropic pour la mise en français, ou décochez « Rédiger toute la transcription en français ».'); $('anKey').focus(); return; }
+    if (S.mode === 'auto' && !dgKey) { showBanner('Collez votre clé Soniox, ou choisissez le mode manuel.'); $('dgKey').focus(); return; }
     if (S.mode === 'manual' && !SR) { showBanner("Le mode manuel utilise la reconnaissance vocale du navigateur, absente ici. Ouvrez l'application dans Chrome ou Edge, ou choisissez le mode automatique."); return; }
     S.started = true; save(); showWork(); start();
   };
@@ -301,57 +302,90 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
   function showSetup(){ hideBanner(); $('work').hidden = true; $('setup').hidden = false; renderSetup(); }
   function showWork(){ hideBanner(); $('setup').hidden = true; $('work').hidden = false; renderSpeakers(); renderFeed(); ui(); }
 
-  // ================= MOTEUR AUTOMATIQUE (Deepgram, reconnaissance des voix) =================
-  const DG = { ws:null, ctx:null, stream:null, proc:null, ka:null, base:0, opened:false };
-  const dgLang = () => { const l = recLang(); return l === 'ar-MA' ? 'ar-MA' : l.startsWith('en') ? 'en' : 'fr'; };
+  // ================= MOTEUR AUTOMATIQUE (Soniox : voix + langues mélangées + traduction) =================
+  const DG = { ws:null, ctx:null, stream:null, proc:null, ka:null, base:0, opened:false, cur:null };
+  const hints = () => S.lang === 'mix' ? ['ar','fr','en'] : S.lang === 'ar-MA' ? ['ar','fr'] : S.lang.startsWith('en') ? ['en'] : ['fr'];
 
   async function dgStart() {
     try {
       DG.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1}});
     } catch(e) { micDenied(); return false; }
-    const params = new URLSearchParams({model:'nova-3', language:dgLang(), diarize:'true', punctuate:'true', smart_format:'true',
-      interim_results:'true', endpointing:'400', encoding:'linear16', sample_rate:'16000', channels:'1'});
-    DG.base = S.elapsed; DG.opened = false;
-    DG.ws = new WebSocket('wss://api.deepgram.com/v1/listen?' + params, ['token', dgKey]);
+    DG.base = S.elapsed; DG.opened = false; DG.cur = null;
+    try { DG.ws = new WebSocket('wss://stt-rt.soniox.com/transcribe-websocket', ['soniox-api-key', dgKey]); }
+    catch(e) { showBanner('Clé Soniox invalide : vérifiez qu\'elle a été collée en entier, sans espace.'); dgCleanup(); return false; }
     DG.ws.binaryType = 'arraybuffer';
     DG.ws.onopen = () => {
       DG.opened = true;
+      const cfg = {model:'stt-rt-v5', audio_format:'pcm_s16le', sample_rate:16000, num_channels:1,
+        language_hints:hints(), enable_language_identification:true, enable_speaker_diarization:true, enable_endpoint_detection:true};
+      if (needFr()) cfg.translation = {type:'one_way', target_language:'fr'};
+      DG.ws.send(JSON.stringify(cfg));
       DG.ctx = new (window.AudioContext || window.webkitAudioContext)();
       const src = DG.ctx.createMediaStreamSource(DG.stream);
       DG.proc = DG.ctx.createScriptProcessor(4096, 1, 1);
       DG.proc.onaudioprocess = ev => { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(to16k(ev.inputBuffer.getChannelData(0), DG.ctx.sampleRate)); };
       src.connect(DG.proc); DG.proc.connect(DG.ctx.destination);
-      DG.ka = setInterval(() => { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(JSON.stringify({type:'KeepAlive'})); }, 8000);
+      DG.ka = setInterval(() => { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(JSON.stringify({type:'keepalive'})); }, 10000);
     };
     DG.ws.onmessage = ev => {
       let m; try { m = JSON.parse(ev.data); } catch(_) { return; }
-      if (m.type !== 'Results') return;
-      const alt = m.channel && m.channel.alternatives && m.channel.alternatives[0];
-      if (!alt) return;
-      if (!m.is_final) { setLive(alt.transcript); return; }
-      setLive('');
-      const words = alt.words || [];
-      let cur = null;
-      for (const w of words) {
-        const v = w.speaker ?? 0, txt = w.punctuated_word || w.word;
-        if (cur && cur.v === v) { cur.text += ' ' + txt; cur.end = w.end; }
-        else { if (cur) addSeg(cur.text, voiceToSpeaker(cur.v), DG.base + cur.start, cur.v); cur = {v, text:txt, start:w.start, end:w.end}; }
+      if (m.error_code || m.error_message) {
+        showBanner(m.error_code === 401 || /key|auth/i.test(m.error_message || '')
+          ? 'Soniox refuse la clé : vérifiez-la (bouton « Participants »).'
+          : (m.error_code === 402 || /balance|credit|quota/i.test(m.error_message || ''))
+          ? 'Crédit Soniox épuisé : rechargez votre compte sur console.soniox.com.'
+          : 'Erreur Soniox : ' + (m.error_message || m.error_code));
+        DG.fatal = true; return;
       }
-      if (cur) addSeg(cur.text, voiceToSpeaker(cur.v), DG.base + cur.start, cur.v);
+      const toks = m.tokens || [];
+      let liveO = '', liveT = '', changed = false;
+      for (const t of toks) {
+        const tr = t.translation_status === 'translation';
+        if (!t.is_final) { if (t.text !== '<end>') { if (tr) liveT += t.text; else liveO += t.text; } continue; }
+        if (t.text === '<end>') { DG.cur = null; continue; }
+        changed = true;
+        if (tr) addTrans(t); else addOrig(t);
+      }
+      const live = needFr() ? (liveT || liveO) : liveO;
+      setLive(live.trim());
+      if (changed) { save(); renderFeed(true); }
     };
     DG.ws.onclose = ev => {
       if (!running) return;
-      if (!DG.opened || ev.code === 1008 || ev.code === 4001) {
-        showBanner("Deepgram a refusé la connexion : vérifiez la clé (bouton « Participants ») et le crédit restant sur votre compte Deepgram.");
-        stop();
+      if (!DG.opened || DG.fatal || ev.code === 1008 || ev.code === 4001 || ev.code === 1002) {
+        if (!DG.fatal) showBanner("Soniox a refusé la connexion : vérifiez la clé (bouton « Participants ») et le crédit restant sur votre compte Soniox.");
+        DG.fatal = false; stop();
       } else {
         dgCleanup(); S.elapsed = elapsedNow(); dgStart();   // reconnexion automatique
       }
     };
     return true;
   }
+  const tSec = t => DG.base + Math.floor((t.start_ms || 0) / 1000);
+  // texte tel que dit
+  function addOrig(t) {
+    const v = String(t.speaker ?? '1');
+    let g = DG.cur;
+    if (!g || g.v !== v || g.closed) {
+      g = {id:S.nextId++, t:tSec(t), end:tSec(t), s:voiceToSpeaker(v), v, raw:'', text:'', tr: needFr() ? 'live' : 'none'};
+      S.segs.push(g); DG.cur = g;
+    }
+    g.raw += t.text; g.end = tSec(t);
+    if (!needFr()) g.text = tidy(g.raw);
+    if (t.language) g.lang = t.language;
+  }
+  // traduction française : va au dernier passage de la même voix
+  function addTrans(t) {
+    const v = String(t.speaker ?? (DG.cur ? DG.cur.v : '1'));
+    let g = null;
+    for (let i = S.segs.length - 1; i >= 0 && i >= S.segs.length - 6; i--) if (S.segs[i].v === v && S.segs[i].tr !== 'none') { g = S.segs[i]; break; }
+    if (!g) g = S.segs[S.segs.length - 1];
+    if (!g || g.edited) return;
+    g.text = tidy((g.text || '') + t.text); g.tr = 'done';
+  }
+  const tidy = x => { x = x.replace(/\s+/g, ' ').trim(); return x.charAt(0).toUpperCase() + x.slice(1); };
   function dgStop() {
-    try { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(JSON.stringify({type:'CloseStream'})); } catch(_){}
+    try { if (DG.ws && DG.ws.readyState === 1) DG.ws.send(''); } catch(_){}
     const ws = DG.ws; setTimeout(() => { try { ws && ws.close(); } catch(_){} }, 1500);
     dgCleanup(true);
   }
@@ -445,14 +479,14 @@ select{border:1px solid var(--line);background:var(--surface);border-radius:8px;
     let seg;
     if (last && last.s === s && last.v === v && t - last.end < 8 && !last.edited) {
       seg = last; seg.end = t;
-      if (needFr()) seg.raw = (seg.raw || seg.text) + ' ' + text; else seg.text += ' ' + text;
+      if (needClaude()) seg.raw = (seg.raw || seg.text) + ' ' + text; else seg.text += ' ' + text;
     } else {
       const cap = text.charAt(0).toUpperCase() + text.slice(1);
       seg = {id:S.nextId++, t, end:t, s, v, text:cap};
-      if (needFr()) { seg.raw = text; seg.text = ''; }
+      if (needClaude()) { seg.raw = text; seg.text = ''; }
       S.segs.push(seg);
     }
-    if (needFr()) { seg.tr = 'pending'; scheduleFr(seg); }
+    if (needClaude()) { seg.tr = 'pending'; scheduleFr(seg); }
     save(); renderFeed(true);
   }
 
@@ -572,7 +606,7 @@ ${raw}`;
       const tx = document.createElement('div'); tx.className = 'txt'; tx.contentEditable = 'true'; tx.dir = 'auto';
       const waiting = g.raw && !g.edited && g.tr !== 'done';
       tx.textContent = waiting ? g.raw : g.text;
-      if (waiting && g.tr === 'pending') tx.classList.add('pending');
+      if (waiting && (g.tr === 'pending' || g.tr === 'live')) tx.classList.add('pending');
       tx.onblur = () => {
         const v = tx.textContent.trim(); if (v === (waiting ? g.raw : g.text)) return;
         g.text = v; g.edited = true; clearTimeout(frTimers.get(g.id));
@@ -662,7 +696,7 @@ ${raw}`;
   updTimer();
   if (S.started) showWork(); else showSetup();
   // phrases restées en attente (page rechargée) : on relance leur mise en français
-  if (anKey) S.segs.filter(g => g.raw && !g.edited && g.tr !== 'done').forEach(g => { g.tr = 'pending'; scheduleFr(g); });
+  if (anKey) S.segs.filter(g => g.raw && !g.edited && (g.tr === 'pending' || g.tr === 'error')).forEach(g => { g.tr = 'pending'; scheduleFr(g); });
 })();
 </script>
 </body>
